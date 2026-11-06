@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SeaChat · AI 顾问{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">SC</span>
+      <span class="brand-text">SeaChat<em>AI CRM</em></span>
+    </a>
+    <nav class="nav">
+      <a href="/" class="{{ 'is-active' if active == 'chat' else '' }}">客户视图</a>
+      <a href="/admin/customers" class="{{ 'is-active' if active == 'customers' else '' }}">客户</a>
+      <a href="/admin/kb" class="{{ 'is-active' if active == 'kb' else '' }}">知识库</a>
+    </nav>
+    {% if active in ('customers', 'kb') %}
+    <div class="key-box">
+      <label for="apiKey">API Key</label>
+      <input id="apiKey" type="password" placeholder="X-API-Key" autocomplete="off" spellcheck="false">
+      <span id="keyState" class="key-state"></span>
+    </div>
+    {% else %}
+    <div class="topbar-right">
+      <span class="badge badge-soft">客户视图</span>
+      <span id="topbarPhone" class="topbar-phone"></span>
+    </div>
+    {% endif %}
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

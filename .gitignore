@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/
+logs/
+.pytest_cache/
+install.log
+install.err.log
+.tmpdl/

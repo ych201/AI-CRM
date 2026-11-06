@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}SeaChat · 知识库{% endblock %}
+{% block body_class %}page-admin page-kb{% endblock %}
+
+{% block content %}
+<main class="admin-wrap" data-page="kb">
+  <div class="page-head">
+    <div>
+      <h1>知识库</h1>
+      <p>这里是向量库的真相源。保存后立即切片入库，无需重启服务。</p>
+    </div>
+    <div style="display:flex; gap:8px">
+      <button class="btn" id="newDocBtn" type="button">+ 新建</button>
+      <button class="btn" id="rebuildBtn" type="button">重建索引</button>
+    </div>
+  </div>
+
+  <section class="toolbar">
+    <div class="tab-row" id="tabs">
+      <button class="tab is-active" data-collection="market" type="button">市场资料</button>
+      <button class="tab" data-collection="course" type="button">课程资料</button>
+      <button class="tab" data-collection="general" type="button">通用</button>
+    </div>
+    <div class="spacer"></div>
+    <label class="muted" style="font-size:12px; display:flex; align-items:center; gap:6px">
+      <input type="checkbox" id="showDisabled"> 显示已停用
+    </label>
+    <span class="muted" id="kbMeta" style="font-size:12px"></span>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>标题</th>
+          <th>doc_id</th>
+          <th>切片</th>
+          <th>来源</th>
+          <th>更新时间</th>
+          <th style="width:120px">操作</th>
+        </tr>
+      </thead>
+      <tbody id="docRows"></tbody>
+    </table>
+    <div class="empty hidden" id="kbEmpty">这个分类还没有内容，点「+ 新建」写一条。</div>
+  </div>
+</main>
+
+<div class="modal-mask hidden" id="docModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modalTitle">新建知识条目</h2>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" id="modalClose" type="button">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div class="drawer-grid">
+        <div class="field">
+          <label for="docId">doc_id（编辑时不可改）</label>
+          <input class="input mono" id="docId" placeholder="留空自动生成" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="docCollection">分类</label>
+          <select class="select" id="docCollection">
+            <option value="market">市场资料</option>
+            <option value="course">课程资料</option>
+            <option value="general">通用</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="docTitle">标题</label>
+        <input class="input" id="docTitle" placeholder="例如：2026 年课程价格表">
+      </div>
+      <div class="field">
+        <label for="docContent">内容（纯文本 / Markdown）</label>
+        <textarea class="textarea content-area" id="docContent" placeholder="粘贴知识内容，500 字左右会切成 1 个切片。"></textarea>
+        <div class="content-meta">
+          <span>保存后自动切片并写入向量库</span>
+          <span id="contentCount">0 / 20000</span>
+        </div>
+      </div>
+      <p class="form-error" id="modalError"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="modalCancel" type="button">取消</button>
+      <button class="btn btn-primary" id="modalSave" type="button">保存并索引</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

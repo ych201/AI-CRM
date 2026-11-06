@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}SeaChat · 客户{% endblock %}
+{% block body_class %}page-admin page-customers{% endblock %}
+
+{% block content %}
+<main class="admin-wrap" data-page="customers">
+  <div class="page-head">
+    <div>
+      <h1>客户</h1>
+      <p>按意向与活跃度跟进，点任意一行查看画像与最近对话。</p>
+    </div>
+    <button class="btn btn-sm" id="refreshBtn" type="button">刷新</button>
+  </div>
+
+  <section class="stat-grid">
+    <div class="stat"><div class="label">客户总数</div><div class="value" id="statTotal">—</div></div>
+    <div class="stat"><div class="label">今日活跃</div><div class="value" id="statActive">—</div></div>
+    <div class="stat"><div class="label">高意向</div><div class="value" id="statHot">—</div></div>
+    <div class="stat"><div class="label">本周新增</div><div class="value" id="statNew">—</div></div>
+  </section>
+
+  <section class="toolbar">
+    <input class="input" id="search" placeholder="搜索手机号 / 姓名" autocomplete="off">
+    <select class="select" id="stageFilter">
+      <option value="">全部阶段</option>
+      <option value="new">新客</option>
+      <option value="contacted">已接触</option>
+      <option value="qualified">有明确意向</option>
+      <option value="won">已成交</option>
+      <option value="lost">已流失</option>
+    </select>
+    <select class="select" id="intentFilter">
+      <option value="">全部意向</option>
+      <option value="hot">高</option>
+      <option value="warm">中</option>
+      <option value="cold">冷</option>
+    </select>
+    <div class="spacer"></div>
+    <span class="muted" id="listMeta" style="font-size:12px"></span>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>手机号</th>
+          <th>姓名</th>
+          <th>阶段</th>
+          <th>意向</th>
+          <th>最近消息</th>
+          <th>消息数</th>
+          <th>活跃时间</th>
+        </tr>
+      </thead>
+      <tbody id="customerRows"></tbody>
+    </table>
+    <div class="empty hidden" id="emptyState">还没有客户，去聊天页发一句试试。</div>
+    <div class="table-foot hidden" id="loadMoreWrap">
+      <button class="btn btn-sm" id="loadMore" type="button">加载更多</button>
+    </div>
+  </div>
+</main>
+
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="avatar" id="dAvatar">客</div>
+    <div>
+      <div class="customer-phone" id="dPhone">—</div>
+      <div class="customer-meta" id="dMeta"></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" id="drawerClose" type="button">关闭</button>
+  </div>
+  <div class="drawer-body">
+    <section class="drawer-section">
+      <h3>画像</h3>
+      <dl class="kv" id="dProfile"></dl>
+    </section>
+
+    <section class="drawer-section">
+      <h3>阶段与意向</h3>
+      <div class="drawer-grid">
+        <div class="field">
+          <label for="dStage">阶段</label>
+          <select class="select" id="dStage">
+            <option value="new">新客</option>
+            <option value="contacted">已接触</option>
+            <option value="qualified">有明确意向</option>
+            <option value="won">已成交</option>
+            <option value="lost">已流失</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="dIntent">意向</label>
+          <select class="select" id="dIntent">
+            <option value="cold">冷</option>
+            <option value="warm">中</option>
+            <option value="hot">高</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <h3>标签</h3>
+      <div class="tag-row" id="dTags"></div>
+      <div style="display:flex; gap:8px; margin-top:8px">
+        <input class="input" id="dTagInput" maxlength="12" placeholder="输入标签后回车">
+        <button class="btn btn-sm" id="dTagAdd" type="button">添加</button>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <h3>备注</h3>
+      <textarea class="textarea note-area" id="dNote" placeholder="例如：已约周三试听"></textarea>
+    </section>
+
+    <section class="drawer-section">
+      <h3>最近对话</h3>
+      <div id="dMessages"></div>
+    </section>
+
+    <div>
+      <a class="btn btn-sm" id="dOpenChat" href="/" target="_blank" rel="noreferrer">打开对话</a>
+    </div>
+  </div>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

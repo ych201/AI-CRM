@@ -1,0 +1,9 @@
+flask>=3.0
+python-dotenv>=1.0
+openai>=1.40
+langchain-text-splitters>=0.3
+chromadb>=0.5
+tavily-python>=0.5
+pytest>=8.0
+waitress>=3.0; sys_platform == "win32"
+gunicorn>=21.2; sys_platform != "win32"
