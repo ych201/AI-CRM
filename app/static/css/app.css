@@ -399,6 +399,36 @@ tbody tr.is-clickable:hover { background: #fafaff; }
 .modal-foot { padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
 .content-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .content-area { min-height: 220px; font-family: var(--mono); font-size: 12.5px; }
+
+/* 文件上传 */
+.drop-zone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 24px 16px; text-align: center;
+  border: 1px dashed var(--line); border-radius: var(--r-md);
+  background: #fbfbfd; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop-zone:hover, .drop-zone.is-over { border-color: var(--brand); background: var(--brand-soft); }
+.drop-zone input[type="file"] { display: none; }
+.drop-zone strong { font-size: 13px; font-weight: 500; }
+.drop-zone span { font-size: 11px; color: var(--muted); }
+.upload-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.upload-list:empty { display: none; }
+.upload-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: #fff; font-size: 12px;
+}
+.upload-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-item .status { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.upload-item.is-done .status { color: var(--ok); }
+.upload-item.is-error .status { color: var(--danger); }
+.upload-item .remove {
+  border: none; background: none; padding: 0 2px;
+  color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.upload-item .remove:hover { color: var(--danger); }
+
 .tab-row { display: flex; gap: 6px; }
 .tab {
   padding: 6px 14px; border-radius: 999px; border: 1px solid transparent;

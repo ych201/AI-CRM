@@ -29,6 +29,21 @@
     setTimeout(function () { el.remove(); }, 3200);
   }
 
+  function readResponse(res) {
+    return res.json().catch(function () { return {}; }).then(function (data) {
+      if (res.status === 401) {
+        toast('API Key 无效，请在右上角填写', 'error');
+        throw new Error('unauthorized');
+      }
+      if (!res.ok) {
+        var message = (data.error && data.error.message) || '请求失败';
+        toast(message, 'error');
+        throw new Error(message);
+      }
+      return data;
+    });
+  }
+
   function api(path, options) {
     options = options || {};
     var headers = options.headers || {};
@@ -36,20 +51,13 @@
     if (apiKey()) headers['X-API-Key'] = apiKey();
     var init = { method: options.method || 'GET', headers: headers };
     if (options.body) init.body = JSON.stringify(options.body);
-    return fetch(path, init).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (data) {
-        if (res.status === 401) {
-          toast('API Key 无效，请在右上角填写', 'error');
-          throw new Error('unauthorized');
-        }
-        if (!res.ok) {
-          var message = (data.error && data.error.message) || '请求失败';
-          toast(message, 'error');
-          throw new Error(message);
-        }
-        return data;
-      });
-    });
+    return fetch(path, init).then(readResponse);
+  }
+
+  function apiUpload(path, formData) {
+    var headers = {};
+    if (apiKey()) headers['X-API-Key'] = apiKey();
+    return fetch(path, { method: 'POST', headers: headers, body: formData }).then(readResponse);
   }
 
   function text(tag, value, className) {
@@ -328,6 +336,10 @@
   function initKb() {
     var state = { collection: 'market', items: [] };
     var editing = null;
+    var pending = [];
+    var uploading = false;
+    var UPLOAD_EXTS = ['.pdf', '.docx', '.txt', '.md', '.markdown'];
+    var UPLOAD_MAX = 10 * 1024 * 1024;
 
     function load() {
       var qs = '?collection=' + state.collection + ($('showDisabled').checked ? '&show_disabled=1' : '');
@@ -476,6 +488,150 @@
         });
     }
 
+    /* ---- 文件上传 */
+    function fileExt(name) {
+      var i = String(name).lastIndexOf('.');
+      return i < 0 ? '' : String(name).slice(i).toLowerCase();
+    }
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    function openUpload() {
+      pending = [];
+      uploading = false;
+      $('uploadError').textContent = '';
+      $('uploadCollection').value = state.collection;
+      $('fileInput').value = '';
+      $('uploadSave').disabled = false;
+      $('uploadSave').textContent = '上传并索引';
+      renderUploads();
+      $('uploadModal').classList.remove('hidden');
+    }
+
+    function closeUpload() {
+      if (uploading) return;
+      $('uploadModal').classList.add('hidden');
+      pending = [];
+    }
+
+    function addFiles(files) {
+      if (uploading) return;
+      var rejected = [];
+      Array.prototype.forEach.call(files || [], function (file) {
+        var ext = fileExt(file.name);
+        if (UPLOAD_EXTS.indexOf(ext) === -1) {
+          rejected.push(file.name + '：格式不支持');
+          return;
+        }
+        if (file.size === 0) {
+          rejected.push(file.name + '：文件为空');
+          return;
+        }
+        if (file.size > UPLOAD_MAX) {
+          rejected.push(file.name + '：超过 10MB');
+          return;
+        }
+        var dup = pending.some(function (item) {
+          return item.file.name === file.name && item.file.size === file.size;
+        });
+        if (!dup) pending.push({ file: file, status: 'ready', message: '' });
+      });
+      $('uploadError').textContent = rejected.length ? rejected.join('；') : '';
+      renderUploads();
+    }
+
+    function renderUploads() {
+      var host = $('uploadList');
+      host.innerHTML = '';
+      pending.forEach(function (item, index) {
+        var cls = 'upload-item';
+        if (item.status === 'done') cls += ' is-done';
+        if (item.status === 'error') cls += ' is-error';
+        var li = document.createElement('li');
+        li.className = cls;
+        li.appendChild(text('span', item.file.name, 'name'));
+        li.appendChild(text('span', fmtSize(item.file.size), 'muted'));
+        var status = item.status === 'uploading' ? '解析中…'
+          : item.status === 'done'
+            ? ('已索引 ' + item.chunks + ' 切片' + (item.documents > 1 ? '（拆为 ' + item.documents + ' 条）' : ''))
+            : item.status === 'error' ? (item.message || '失败')
+              : '待上传';
+        li.appendChild(text('span', status, 'status'));
+        if (!uploading && item.status !== 'done') {
+          var remove = text('button', '×', 'remove');
+          remove.type = 'button';
+          remove.title = '移除';
+          remove.addEventListener('click', function () {
+            pending.splice(index, 1);
+            renderUploads();
+          });
+          li.appendChild(remove);
+        }
+        host.appendChild(li);
+      });
+    }
+
+    function uploadAll() {
+      if (uploading) return;
+      if (!pending.length) {
+        $('uploadError').textContent = '请先选择要上传的文件';
+        return;
+      }
+      var collection = $('uploadCollection').value;
+      var btn = $('uploadSave');
+      uploading = true;
+      $('uploadError').textContent = '';
+      btn.disabled = true;
+      btn.textContent = '处理中…';
+
+      function finish() {
+        uploading = false;
+        btn.disabled = false;
+        btn.textContent = '上传并索引';
+        renderUploads();
+        var done = pending.filter(function (item) { return item.status === 'done'; }).length;
+        var failed = pending.length - done;
+        if (!done) {
+          toast('上传失败，请检查日志后重试', 'error');
+          return;
+        }
+        toast('已导入 ' + done + ' 个文件' + (failed ? '，' + failed + ' 个失败' : ''), failed ? 'error' : 'ok');
+        state.collection = collection;
+        syncTabs();
+        load();
+        if (!failed) setTimeout(closeUpload, 600);
+      }
+
+      function next(i) {
+        if (i >= pending.length) { finish(); return; }
+        var item = pending[i];
+        if (item.status === 'done') { next(i + 1); return; }
+        item.status = 'uploading';
+        renderUploads();
+        var form = new FormData();
+        form.append('file', item.file);
+        form.append('collection', collection);
+        apiUpload('/api/kb/upload', form).then(function (result) {
+          item.status = 'done';
+          item.chunks = result.chunks;
+          item.documents = result.documents || 1;
+          item.docId = result.doc_id;
+        }).catch(function (err) {
+          item.status = 'error';
+          item.message = err.message || '失败';
+        }).then(function () {
+          renderUploads();
+          next(i + 1);
+        });
+      }
+
+      next(0);
+    }
+
     function syncTabs() {
       var tabs = $('tabs').querySelectorAll('.tab');
       for (var i = 0; i < tabs.length; i += 1) {
@@ -492,6 +648,7 @@
     });
     $('showDisabled').addEventListener('change', load);
     $('newDocBtn').addEventListener('click', function () { openModal(null); });
+    $('uploadBtn').addEventListener('click', openUpload);
     $('rebuildBtn').addEventListener('click', rebuild);
     $('modalClose').addEventListener('click', closeModal);
     $('modalCancel').addEventListener('click', closeModal);
@@ -499,6 +656,34 @@
     $('docContent').addEventListener('input', updateCount);
     $('docModal').addEventListener('click', function (e) {
       if (e.target === $('docModal')) closeModal();
+    });
+
+    $('uploadClose').addEventListener('click', closeUpload);
+    $('uploadCancel').addEventListener('click', closeUpload);
+    $('uploadSave').addEventListener('click', uploadAll);
+    $('fileInput').addEventListener('change', function (e) {
+      addFiles(e.target.files);
+      e.target.value = '';
+    });
+    $('uploadModal').addEventListener('click', function (e) {
+      if (e.target === $('uploadModal')) closeUpload();
+    });
+    ['dragenter', 'dragover'].forEach(function (name) {
+      $('dropZone').addEventListener(name, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $('dropZone').classList.add('is-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (name) {
+      $('dropZone').addEventListener(name, function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $('dropZone').classList.remove('is-over');
+      });
+    });
+    $('dropZone').addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
     });
 
     reloadPage = load;

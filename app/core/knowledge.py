@@ -5,11 +5,13 @@ embedding 失败时旧数据保持可用。
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import threading
 import time
 import uuid
+from pathlib import Path
 
 from app.config import get_config
 from app.core.errors import Conflict, Unprocessable, UpstreamUnavailable
@@ -50,8 +52,51 @@ def split_text(content: str) -> list[str]:
     return [c.strip() for c in chunks if len(c.strip()) >= CHUNK_MIN_LEN]
 
 
+def split_for_documents(content: str, limit: int = CONTENT_MAX) -> list[str]:
+    """把超长文本按段落切成若干 ≤ limit 的片段（文件导入用）。"""
+    text = (content or "").strip()
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+
+    blocks: list[str] = []
+    for para in re.split(r"\n{2,}", text):
+        para = para.strip()
+        while len(para) > limit:
+            cut = para.rfind("。", 0, limit)
+            cut = cut + 1 if cut >= limit // 2 else limit
+            blocks.append(para[:cut].strip())
+            para = para[cut:].lstrip()
+        if para:
+            blocks.append(para)
+
+    parts: list[str] = []
+    buf = ""
+    for block in blocks:
+        candidate = f"{buf}\n\n{block}" if buf else block
+        if len(candidate) <= limit:
+            buf = candidate
+        else:
+            if buf:
+                parts.append(buf)
+            buf = block
+    if buf:
+        parts.append(buf)
+    return parts
+
+
 def new_doc_id(collection: str) -> str:
     return f"{collection}_{time.strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}"
+
+
+def doc_id_from_file(collection: str, filename: str, content: str) -> str:
+    """用「文件名 slug + 内容指纹」生成稳定 doc_id：同一文件重复上传只更新不重复。"""
+    stem = Path(filename or "").stem
+    slug = re.sub(r"[^A-Za-z0-9_.\-]+", "-", stem).strip("-._")[:40]
+    digest = hashlib.sha1((content or "").encode("utf-8")).hexdigest()[:6]
+    parts = [collection] + ([slug] if slug else []) + [digest]
+    return "_".join(parts)[:80]
 
 
 def _validate(collection: str, content: str, doc_id: str | None) -> None:

@@ -33,7 +33,7 @@ python run.py                 # http://127.0.0.1:5000
 |---|---|
 | `/` | 客户端聊天页 |
 | `/admin/customers` | 客户列表 + 详情抽屉（右上角填 `ADMIN_API_KEY`） |
-| `/admin/kb` | 知识库管理（新增 / 编辑 / 删除 / 重建索引） |
+| `/admin/kb` | 知识库管理（新建 / 编辑 / 删除 / 上传 PDF·Word·TXT·Markdown / 重建索引） |
 
 > 端口被占用时：设置环境变量 `PORT=5055` 再启动。
 > 管理端 API Key 默认 `change-me-please`，只存在浏览器 `localStorage`，请在上线前改 `.env`。
@@ -78,6 +78,7 @@ AI-CRM-v2.0/
 │  │  ├─ agents.py           # 4 个工具、Agent 循环、SQL 守卫
 │  │  ├─ profiler.py         # 画像抽取（后台线程）
 │  │  ├─ knowledge.py        # 切片、入库、删除、重建索引
+│  │  ├─ docparse.py         # PDF / Word / TXT / Markdown 文本抽取
 │  │  ├─ ratelimit.py        # 进程内滑动窗口限流
 │  │  ├─ strategies.py       # 画像 → 回答策略
 │  │  ├─ prompts.py          # Prompt 常量
@@ -139,6 +140,7 @@ AI-CRM-v2.0/
 | GET | `/api/kb/documents` | Key | 知识条目列表（`collection` / `show_disabled`） |
 | GET | `/api/kb/documents/{doc_id}` | Key | 单条全文（编辑弹窗用，见 §6） |
 | POST | `/api/kb/documents` | Key | 新增或覆盖更新（对外开放，幂等） |
+| POST | `/api/kb/upload` | Key | 上传 PDF / Word(.docx) / TXT / Markdown，解析后切片入库（单文件 ≤ 10MB） |
 | DELETE | `/api/kb/documents/{doc_id}` | Key | 删除条目与全部向量 |
 | POST | `/api/kb/rebuild` | Key | 按 collection 重建索引（并发返回 409） |
 | GET | `/api/health` | 无 | SQLite / Chroma / LLM / Embedding 探测 |
@@ -242,6 +244,10 @@ curl -N -X POST localhost:5000/api/chat -H 'Content-Type: application/json' \
 curl -s -X POST localhost:5000/api/kb/documents \
   -H 'Content-Type: application/json' -H 'X-API-Key: change-me-please' \
   -d '{"doc_id":"course_pricing","collection":"course","title":"价格表","content":"实战班 9800 元"}'
+
+curl -s -X POST localhost:5000/api/kb/upload \
+  -H 'X-API-Key: change-me-please' \
+  -F 'collection=course' -F 'file=@课程大纲.pdf'
 ```
 
 ---
@@ -250,6 +256,6 @@ curl -s -X POST localhost:5000/api/kb/documents \
 
 - 手机号即身份，任何人可冒充（SDD R4，明确仅本机/内网演示）。
 - 限流与重建锁为进程内实现，多 worker 失效；部署请用 `--threads 4 --workers 1`。
-- 不做暗色模式、不做多租户/RBAC、不做文件上传解析（P1）。
+- 不做暗色模式、不做多租户/RBAC。文件上传支持 `.pdf` / `.docx` / `.txt` / `.md`；旧版 `.doc` 与无文本层的扫描版 PDF 不支持（需先转 `.docx` 或 OCR）。
 - 外部服务均为「超时 + 重试 1 次」，未做熔断与降级缓存；上游长时间不可用时回答会以 `error` 事件结束。
 - 离线模式的回答质量仅用于链路演示，不用于内容验收。

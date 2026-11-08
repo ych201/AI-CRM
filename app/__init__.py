@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 from app.config import configure_logging, get_config
+from app.core.docparse import MAX_FILE_BYTES
 from app.core.errors import ApiError, NotFound
 from app.db.connection import init_db
 from app.vector import store
@@ -33,6 +34,19 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(HTTPException)
     def _http_error(exc: HTTPException):
         if request.path.startswith("/api/"):
+            if exc.code == 413:
+                limit_mb = MAX_FILE_BYTES // (1024 * 1024)
+                return (
+                    jsonify(
+                        {
+                            "error": {
+                                "code": "UNPROCESSABLE",
+                                "message": f"上传内容过大，单个文件不超过 {limit_mb}MB",
+                            }
+                        }
+                    ),
+                    413,
+                )
             code = {
                 404: "NOT_FOUND",
                 405: "INVALID_ARGUMENT",
@@ -80,7 +94,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     )
     app.config.update(
         SECRET_KEY=cfg.secret_key,
-        MAX_CONTENT_LENGTH=4 * 1024 * 1024,
+        MAX_CONTENT_LENGTH=MAX_FILE_BYTES + 1024 * 1024,
         JSON_SORT_KEYS=False,
     )
     app.json.ensure_ascii = False

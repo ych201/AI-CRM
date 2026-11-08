@@ -10,6 +10,7 @@
       <p>这里是向量库的真相源。保存后立即切片入库，无需重启服务。</p>
     </div>
     <div style="display:flex; gap:8px">
+      <button class="btn" id="uploadBtn" type="button">上传文件</button>
       <button class="btn" id="newDocBtn" type="button">+ 新建</button>
       <button class="btn" id="rebuildBtn" type="button">重建索引</button>
     </div>
@@ -85,6 +86,40 @@
     <div class="modal-foot">
       <button class="btn" id="modalCancel" type="button">取消</button>
       <button class="btn btn-primary" id="modalSave" type="button">保存并索引</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask hidden" id="uploadModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>上传文件建库</h2>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" id="uploadClose" type="button">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="uploadCollection">分类</label>
+        <select class="select" id="uploadCollection">
+          <option value="market">市场资料</option>
+          <option value="course">课程资料</option>
+          <option value="general">通用</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>文件（PDF / Word / TXT / Markdown，单个不超过 10MB）</label>
+        <label class="drop-zone" id="dropZone" for="fileInput">
+          <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt,.md,.markdown">
+          <strong>点击选择，或把文件拖到这里</strong>
+          <span>支持 .pdf / .docx / .txt / .md，可一次选多个</span>
+        </label>
+      </div>
+      <ul class="upload-list" id="uploadList"></ul>
+      <p class="form-error" id="uploadError"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="uploadCancel" type="button">取消</button>
+      <button class="btn btn-primary" id="uploadSave" type="button">上传并索引</button>
     </div>
   </div>
 </div>

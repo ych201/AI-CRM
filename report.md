@@ -1,7 +1,7 @@
 # SeaChat AI CRM v2.0 代码库分析报告
 
 > 分析范围：`app/`、`scripts/`、`tests/`、`run.py`（不含 `data/` 运行时数据与前端模板样式细节）。
-> 报告内容以源码为准，共 **35 个 Python 文件**、2 个前端 JS 文件、5 张业务表、3 个向量集合。
+> 报告内容以源码为准，共 **37 个 Python 文件**、2 个前端 JS 文件、5 张业务表、3 个向量集合。
 
 ---
 
@@ -19,6 +19,7 @@ SeaChat AI CRM 是一套面向 AI 职业培训机构的智能咨询 CRM：客户
 | LLM | DeepSeek `deepseek-chat`（OpenAI 兼容） | 未配置 Key 时降级 `EchoClient` |
 | Embedding | 百炼 `text-embedding-v4`（1024 维，批量 ≤10） | 未配置 Key 时降级本地字符 n-gram 哈希向量 |
 | 联网搜索 | Tavily | 未配置 Key 时返回 `TAVILY_NOT_CONFIGURED` |
+| 文件解析 | `pypdf` + `python-docx` | 知识库上传 PDF / Word(.docx) / TXT / Markdown；旧版 `.doc` 与无文本层扫描件不支持 |
 | 前端 | 原生 HTML + Jinja2 + 原生 JS | `fetch` + `ReadableStream` 解析 SSE |
 | 测试 | pytest | 离线可跑，无需外部服务 |
 
@@ -30,13 +31,13 @@ SeaChat AI CRM 是一套面向 AI 职业培训机构的智能咨询 CRM：客户
 | `app/__init__.py` | 应用工厂：注册 Blueprint、统一错误处理、DB 初始化、JSON 编码 |
 | `app/config.py` | `.env` 读取、单例配置、绝对路径解析、结构化 JSON 日志 |
 | `app/api/` | HTTP 接口层（会话/对话、客户、知识库、健康检查、页面） |
-| `app/core/` | 业务核心：编排、意图、检索、Agent、画像、知识库写入、限流、策略、Prompt |
+| `app/core/` | 业务核心：编排、意图、检索、Agent、画像、知识库写入、文件解析、限流、策略、Prompt |
 | `app/db/` | SQLite 访问层：连接管理、DDL、三组表读写 |
 | `app/llm/` | LLM 客户端与 Embedding 封装（含离线降级实现） |
 | `app/vector/` | Chroma 客户端、Collection 管理、写入与检索 |
 | `app/templates/`、`app/static/` | 三个页面与前端逻辑 |
 | `scripts/` | 建表、导入示例知识、端到端冒烟 |
-| `tests/` | 意图、对话链路、知识库、检索、SQL 守卫单测 |
+| `tests/` | 意图、对话链路、知识库、知识库文件上传、检索、SQL 守卫单测 |
 
 ### 1.3 一次对话的主链路
 
@@ -117,6 +118,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | 画像更新 | 后台线程合并 `customers.profile`；`intent_level=hot` 且有 `goal` 时 `stage→qualified`；用户消息 ≥3 条时 `new→contacted` |
 | 删除客户 | `DELETE customers` 级联删除其会话与消息（知识库不受影响） |
 | 知识条目更新 | 重算切片与向量，覆盖 `kb_documents` 并清理旧切片 |
+| 文件上传入库 | 抽取文本 → 超 20000 字按段落拆成多条 → 每条切片向量化并写入 `kb_documents`（`source=file:<ext>`）；同内容重复上传为更新 |
 | 重建索引 | 清空指定 Collection，按 `kb_documents.content` 重新切片、向量化、回写 `chunk_count` |
 
 ---
@@ -176,11 +178,11 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 
 | 字段 | 类型 | 约束/默认 | 含义 |
 |---|---|---|---|
-| `id` | TEXT | PK | 业务 `doc_id`，与 Chroma 元数据 `doc_id` 一致；正则 `[A-Za-z0-9_.-]{1,80}`，未传则自动生成 `{collection}_{YYYYMMDD}_{6位hex}` |
+| `id` | TEXT | PK | 业务 `doc_id`，与 Chroma 元数据 `doc_id` 一致；正则 `[A-Za-z0-9_.-]{1,80}`，未传则自动生成 `{collection}_{YYYYMMDD}_{6位hex}`；文件上传生成 `{collection}_{文件名slug}_{内容sha1前6位}`，重复上传同内容幂等 |
 | `collection` | TEXT | NOT NULL | 所属集合：`market` / `course` / `general` |
-| `title` | TEXT | NOT NULL | 条目标题；未传时取正文前 20 字 |
-| `content` | TEXT | NOT NULL | 知识全文，接口限制 20000 字；切片来源 |
-| `source` | TEXT | 可空 | 来源标记：`manual` 手工 / `cms` 内容系统 / `import` 导入 |
+| `title` | TEXT | NOT NULL | 条目标题；未传时取正文前 20 字；上传取文件名（超长文件拼接 `（i/n）` 序号） |
+| `content` | TEXT | NOT NULL | 知识全文，单条限制 20000 字；切片来源。文件上传超过该上限时由 `split_for_documents` 按段落拆成多条记录 |
+| `source` | TEXT | 可空 | 来源标记：`manual` 手工 / `cms` 内容系统 / `import` 导入 / `file:pdf`、`file:docx`、`file:txt`、`file:md` 文件上传 |
 | `chunk_count` | INTEGER | NOT NULL `0` | 当前切片数，写入/重建时回填 |
 | `enabled` | INTEGER | NOT NULL `1` | 是否启用：1 参与检索与重建，0 停用（写入失败时会被置 0） |
 | `created_at` | TEXT | 本地时间 | 创建时间 |
@@ -260,9 +262,9 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | 方法 | 用途 | 关键行为 / 返回 |
 |---|---|---|
 | `run.py` 模块级 | 创建应用 | `app = create_app()`；开发模式 `threaded=True, use_reloader=False`，生产优先 waitress（8 线程） |
-| `app.create_app(test_config)` | 应用工厂 | 读取配置 → 测试配置覆盖并重置 LLM/Embedder/Chroma/意图缓存/限流 → 注册蓝图与错误处理 → `init_db()` → 返回 Flask 实例 |
+| `app.create_app(test_config)` | 应用工厂 | 读取配置 → 测试配置覆盖并重置 LLM/Embedder/Chroma/意图缓存/限流 → 注册蓝图与错误处理 → `init_db()` → 返回 Flask 实例；`MAX_CONTENT_LENGTH = 11MB`（`docparse.MAX_FILE_BYTES + 1MB`） |
 | `app._register_blueprints(app)` | 注册路由 | 依次注册 `pages`、`chat`、`customers`、`kb`、`health` 蓝图 |
-| `app._register_error_handlers(app)` | 注册错误处理 | 内部函数 `_api_error`（`ApiError`→JSON）、`_http_error`（HTTP 异常→错误码）、`_unhandled`（未捕获异常→500） |
+| `app._register_error_handlers(app)` | 注册错误处理 | 内部函数 `_api_error`（`ApiError`→JSON）、`_http_error`（HTTP 异常→错误码；413 转为「单个文件不超过 10MB」提示）、`_unhandled`（未捕获异常→500） |
 | `app._json_charset(response)` | `after_request` 钩子 | 为 `application/json` 响应补 `charset=utf-8` |
 
 ### 4.2 配置与日志（`app/config.py`）
@@ -392,6 +394,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `_check_limit()` | KB 写操作限流 | 超限抛 `RateLimited`(429) |
 | `list_documents()` | `GET /api/kb/documents` | 支持 `collection/show_disabled/page/page_size` |
 | `upsert_document()` | `POST /api/kb/documents` | 校验后调用 `knowledge.upsert_document`，返回 doc_id/切片数/动作 |
+| `upload_document()` | `POST /api/kb/upload` | 接收 multipart `file` + `collection`（可选 `title/doc_id/source`）；`docparse.extract_text` 抽取文本，超 20000 字按段落拆成多条入库；返回 `doc_ids/documents/chunks/action/filename/chars` |
 | `get_document(doc_id)` | `GET /api/kb/documents/{doc_id}` | 返回全文（编辑弹窗用） |
 | `delete_document(doc_id)` | `DELETE /api/kb/documents/{doc_id}` | 删向量 + 删元数据；不存在返回 404 |
 | `rebuild()` | `POST /api/kb/rebuild` | 按 `collection`（默认 `all`）重建索引 |
@@ -473,7 +476,9 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 |---|---|---|
 | `_splitter()` | 构造切片器 | `RecursiveCharacterTextSplitter(500/80)`，分隔符按段落/句号等；不可用时返回 `None` |
 | `split_text(content)` | 切片 | 无 splitter 时按 500 字硬切；过滤长度 <15 的切片 |
+| `split_for_documents(content, limit=20000)` | 超长文本拆分（文件导入） | 先按空行分段，单段超限时优先在句号处断开；再按 `limit` 装箱，返回若干 ≤20000 字的片段 |
 | `new_doc_id(collection)` | 生成 doc_id | `{collection}_{YYYYMMDD}_{6位hex}` |
+| `doc_id_from_file(collection, filename, content)` | 上传生成稳定 doc_id | 文件名 slug（仅保留 `A-Za-z0-9_.-`，≤40 字）+ 内容 sha1 前 6 位；中文文件名自动省略 slug |
 | `_validate(collection, content, doc_id)` | 入参校验 | collection 枚举、content 非空且 ≤20000、doc_id 正则 |
 | `upsert_document(collection, content, title, doc_id, source)` | 新增/覆盖知识条目 | 先全量 embedding → 写临时前缀切片 → 删旧 → 写正式 id → 删临时 → 写元数据；失败置 `enabled=0` 并抛 503；返回 doc_id/chunks/action/indexed_at/title |
 | `_safe_disable(doc_id, existing)` | 失败兜底 | 已存在条目则置为停用 |
@@ -481,7 +486,20 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `_rebuild_one(collection)` | 单集合重建 | 清空集合 → 逐条切片向量化 → 回写 chunk_count；失败条目停用；返回 (文档数, 切片数, 失败数) |
 | `rebuild(collection="all")` | 重建索引 | 非阻塞锁防并发（409）；支持单集合或全部；返回统计与耗时 |
 
-### 4.10 客户画像（`app/core/profiler.py`）
+### 4.10 文件解析（`app/core/docparse.py`）
+
+| 方法 | 用途 | 关键行为 / 返回 |
+|---|---|---|
+| `MAX_FILE_BYTES` / `SUPPORTED_EXTS`（模块常量） | 上传约束 | 单文件 10MB；支持 `.pdf` / `.docx` / `.txt` / `.md` / `.markdown` |
+| `ext_of(filename)` | 取扩展名 | 小写后缀（含点），无后缀返回空串 |
+| `_normalize(text)` | 文本清洗 | 统一换行、去控制字符、折叠行内空白、把连续 3 个以上换行折叠为 1 个空行 |
+| `_decode_plain(data)` | 纯文本解码 | 识别 UTF-16 / UTF-8 BOM；依次尝试 UTF-8、GB18030，最后 UTF-8 容错解码 |
+| `_pdf_text(data)` | PDF 抽取 | `pypdf` 按页 `extract_text()`；加密、损坏、缺依赖抛 `Unprocessable`(422) |
+| `_docx_text(data)` | Word 抽取 | `python-docx` 读取段落与表格（表格按行拼接各单元格文本）；损坏、缺依赖抛 422 |
+| `extract_text(filename, data)` | 统一抽取入口 | 校验文件名 / 空文件 / 大小 / 扩展名 → 按类型抽取 → 清洗；无文本抛 422（扫描件提示先 OCR） |
+| `source_label(filename)` | 来源标记 | 返回 `file:pdf` / `file:docx` / `file:txt` / `file:md` 等，写入 `kb_documents.source` |
+
+### 4.11 客户画像（`app/core/profiler.py`）
 
 | 方法 | 用途 | 关键行为 / 返回 |
 |---|---|---|
@@ -491,7 +509,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `_safe_extract(customer_id, conversation_id)` | 异常隔离 | 捕获所有异常并记日志 |
 | `schedule(customer_id, conversation_id)` | 调度后台线程 | daemon 线程执行，不阻塞 SSE |
 
-### 4.11 限流、策略与错误
+### 4.12 限流、策略与错误
 
 | 方法 | 模块 | 用途 |
 |---|---|---|
@@ -508,7 +526,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `InvalidArgument` / `Unauthorized` / `NotFound` / `Conflict` / `Unprocessable` / `RateLimited` / `UpstreamUnavailable` | `core/errors.py` | 对应 400/401/404/409/422/429/503 |
 | `SQLRejected.__init__(reason)` | `core/errors.py` | SQL 安全拒绝，作为工具结果回填模型 |
 
-### 4.12 LLM 客户端（`app/llm/client.py`）
+### 4.13 LLM 客户端（`app/llm/client.py`）
 
 | 方法 | 用途 | 关键行为 / 返回 |
 |---|---|---|
@@ -530,7 +548,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `reset_llm()` | 重置单例 | 测试/配置切换 |
 | `llm_available()` | 是否线上模型 | 布尔 |
 
-### 4.13 Embedding（`app/llm/embedding.py`）
+### 4.14 Embedding（`app/llm/embedding.py`）
 
 | 方法 | 用途 | 关键行为 / 返回 |
 |---|---|---|
@@ -543,7 +561,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `get_embedder()` | 获取 Embedder 单例 | 线程安全 |
 | `reset_embedder()` | 重置单例 | 测试/配置切换 |
 
-### 4.14 向量库（`app/vector/store.py`）
+### 4.15 向量库（`app/vector/store.py`）
 
 | 方法 | 用途 | 关键行为 / 返回 |
 |---|---|---|
@@ -561,7 +579,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `query(collection_key, embedding, k=4)` | 向量检索 | 返回 content/doc_id/title/collection/chunk_index/score，按分数倒序 |
 | `search_all(embedding, k=4)` | 跨集合检索 | 合并三集合结果取 top_k |
 
-### 4.15 脚本
+### 4.16 脚本
 
 | 方法 | 用途 |
 |---|---|
@@ -571,7 +589,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `scripts/smoke_test.py::parse_sse(body)` | 解析 SSE 响应为 `(event, data)` 列表 |
 | `scripts/smoke_test.py::main()` | 端到端冒烟：健康检查 → 会话 → 课程问答（含引用）→ SQL Agent → 落库 → 鉴权 |
 
-### 4.16 测试
+### 4.17 测试
 
 | 文件 | 方法 / 用例 | 覆盖点 |
 |---|---|---|
@@ -579,10 +597,13 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `tests/test_chat_flow.py` | `parse_sse`、`test_session_and_chat`、`test_profile_pipeline`、`test_chat_validations` | SSE 事件序列、引用落库、画像自动更新、参数校验 |
 | `tests/test_intent.py` | `test_rule_classify`、`test_classify_falls_back_to_rules`、`test_low_confidence_becomes_direct`、`test_routes_match_intent_table` | 关键词分类、LLM 失败降级、低置信度转直答、意图路由映射 |
 | `tests/test_kb_api.py` | `test_requires_api_key`、`test_create_update_delete`、`test_validation`、`test_auto_doc_id`、`test_rebuild` | 鉴权、幂等覆盖、切片一致、参数校验、重建索引 |
+| `tests/test_kb_upload.py` | `test_upload_requires_api_key`、`test_upload_markdown`、`test_upload_txt_gbk`、`test_upload_docx`、`test_upload_pdf`、`test_upload_long_file_splits_into_documents`、`test_upload_same_file_is_idempotent`、`test_upload_rejects_bad_input` | 上传鉴权、四种格式解析（含手工构造 PDF）、GBK 编码、长文件拆分、重复上传幂等、非法输入 |
 | `tests/test_retriever.py` | `seeded` fixture、`test_retrieve_returns_ranked_hits`、`test_threshold_filters_everything`、`test_build_context_and_citations`、`test_empty_collection` | 排序、阈值过滤、上下文/引用格式、空集合 |
 | `tests/test_sql_guard.py` | `test_accepts_single_select`、`test_accepts_with_clause`、`test_rejects_dangerous_sql`、`test_readonly_connection_blocks_writes`、`test_masks_phone_in_results`、`test_limits_rows_to_100`、`test_unknown_table_rejected` | 只读约束、危险语句拦截、脱敏、100 行上限、表白名单 |
 
-### 4.17 前端（`app/static/js/`）
+> 当前 `pytest tests` 共 **47 个用例**，离线模式（无任何外部 Key）全部通过。
+
+### 4.18 前端（`app/static/js/`）
 
 #### `chat.js`（客户端聊天页）
 
@@ -615,13 +636,15 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 |---|---|
 | `apiKey()` | 从 localStorage 读取管理端 Key |
 | `toast(message, kind)` | 轻提示 |
-| `api(path, options)` | 统一 fetch 封装：自动带 `X-API-Key`，401/错误统一提示并抛出 |
+| `readResponse(res)` | 统一解析响应：401 提示 Key 无效，其他错误弹 toast 并抛出，成功返回 JSON |
+| `api(path, options)` | 统一 fetch 封装：自动带 `X-API-Key`，JSON 请求体，复用 `readResponse` |
+| `apiUpload(path, formData)` | multipart 上传封装：自动带 `X-API-Key`，不设置 `Content-Type`，复用 `readResponse` |
 | `text(tag, value, className)` | 创建文本节点元素 |
 | `fmtTime(value)` | 时间显示为 `MM-DD HH:mm` |
 | `stageBadge(stage)` / `levelText(level)` | 阶段徽标 / 意向等级文本与配色 |
 | `initKeyBox()` | API Key 输入与保存状态（内部 `mark()` 刷新状态） |
 | `initCustomers()` | 客户页初始化：分页、筛选、抽屉、标签、备注（内部 `params/load/render/rowFor/openDrawer/closeDrawer/fillDrawer/renderTags/patch/refreshRow/addTag`） |
-| `initKb()` | 知识库页初始化：集合 Tab、列表、编辑弹窗、保存、删除、重建（内部 `load/render/openModal/closeModal/updateCount/save/removeDoc/rebuild/syncTabs`） |
+| `initKb()` | 知识库页初始化：集合 Tab、列表、编辑弹窗、保存、删除、重建、文件上传（内部 `load/render/openModal/closeModal/updateCount/save/removeDoc/rebuild/syncTabs/fileExt/fmtSize/openUpload/closeUpload/addFiles/renderUploads/uploadAll`） |
 | `init()` | 按 `data-page` 分发到客户页或知识库页 |
 
 ---
@@ -650,7 +673,11 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 
 `POST /api/kb/documents` → `_check_limit` → `knowledge.upsert_document` → `split_text` → `embed_documents` → `store.add_chunks(tmp)` → `store.delete_doc(旧)` → `store.add_chunks(正式)` → `store.delete_doc(tmp)` → `kb_db.upsert`。
 
-### 5.4 画像沉淀
+### 5.4 知识库文件上传
+
+`POST /api/kb/upload`（multipart）→ `_check_limit` → 校验 `collection` → `docparse.extract_text`（PDF/Word/TXT/MD 抽取 + 清洗）→ `knowledge.split_for_documents`（超 20000 字按段落拆分）→ `doc_id_from_file` 生成稳定 doc_id → 对每个片段调用 `upsert_document`（首段用原 id，其余追加 `_2`、`_3`，标题追加 `（i/n）`）→ 汇总 `documents / chunks / doc_ids` 返回。
+
+### 5.5 画像沉淀
 
 `ChatStream.run` 结束 → `profiler.schedule` → `run_extraction` → `_llm_extract` + `extract_with_rules` → `customers.merge_profile` → `auto_stage_by_rounds`。
 
@@ -666,6 +693,8 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | 错误体 | `{"error": {"code", "message", "field"?}}`；错误码 400/401/404/409/422/429/503 |
 | 页面路由 | `/`、`/admin/customers`、`/admin/kb`、`/favicon.ico` |
 | 限流 | 单手机号 10 次/60s、全局 60 次/60s、KB 写 20 次/60s；仅单进程有效 |
+| 文件上传 | 仅 `POST /api/kb/upload`（需 Key），支持 PDF / Word(.docx) / TXT / Markdown，单文件 ≤10MB；解析后按段落拆分，每条 ≤20000 字；旧版 `.doc` 与无文本层扫描件不支持 |
+| 请求体上限 | `MAX_CONTENT_LENGTH = 11MB`（上传 10MB + 1MB 余量），超出返回 413 与中文提示 |
 | SQL 安全 | 只读连接 + 单条 SELECT/WITH + 5 表白名单 + authorizer + 5s 超时 + 100 行上限 + phone 脱敏 |
 | 上下文控制 | 历史窗口 6 条；超出窗口只保留首条需求 60 字摘要；工具最多 3 轮 |
 | 离线降级 | 无 LLM Key → `EchoClient`；无 Embedding Key → 本地哈希向量 + 相对阈值；无 Tavily Key → `TAVILY_NOT_CONFIGURED` |
@@ -684,7 +713,7 @@ kb_documents (id=TEXT doc_id) ──1:N──> Chroma 切片（metadata.doc_id�
 | `messages.route` | `rag_market` / `rag_course` / `web_search` / `sql` / `direct` / `rag_miss` |
 | `intents.code` | 0 闲聊 / 1 职业咨询 / 2 课程咨询 / 3 实时资讯 / 4 数据查询 |
 | `kb_documents.collection` | `market` / `course` / `general` |
-| `kb_documents.source` | `manual` / `cms` / `import` |
+| `kb_documents.source` | `manual` / `cms` / `import` / `file:pdf` / `file:docx` / `file:txt` / `file:md` / `file:markdown` |
 | `customers.profile` 键 | `current_role` / `years_exp` / `goal` / `budget` / `time_window` / `city` / `concerns` |
 | Chroma 集合名 | `kb_market` / `kb_course` / `kb_general` |
 | 工具名 | `search_knowledge_base` / `web_search` / `query_crm_db` / `update_customer_profile` |

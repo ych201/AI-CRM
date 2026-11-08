@@ -1,10 +1,12 @@
 """知识库接口：/api/kb/*（写操作需要 X-API-Key）。"""
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Blueprint, jsonify, request
 
 from app.api.auth import require_api_key
-from app.core import knowledge, ratelimit
+from app.core import docparse, knowledge, ratelimit
 from app.core.errors import InvalidArgument, NotFound, RateLimited, Unprocessable
 from app.db import kb as kb_db
 
@@ -63,6 +65,71 @@ def upsert_document():
         source=source,
     )
     return jsonify(result)
+
+
+@bp.post("/upload")
+@require_api_key
+def upload_document():
+    """上传 PDF / Word(.docx) / TXT / Markdown，解析为纯文本后直接切片入库。"""
+    _check_limit()
+    upload = request.files.get("file")
+    if upload is None or not (upload.filename or "").strip():
+        raise InvalidArgument("请选择要上传的文件", field="file")
+
+    collection = (request.form.get("collection") or "").strip()
+    if not collection:
+        raise InvalidArgument("collection 不能为空", field="collection")
+    if collection not in kb_db.COLLECTIONS:
+        raise Unprocessable(
+            f"collection 必须是 {'/'.join(kb_db.COLLECTIONS)}", field="collection"
+        )
+
+    filename = Path(upload.filename).name
+    text = docparse.extract_text(filename, upload.read())
+
+    title = (request.form.get("title") or "").strip() or Path(filename).stem[:80]
+    doc_id = (request.form.get("doc_id") or "").strip() or knowledge.doc_id_from_file(
+        collection, filename, text
+    )
+    source = (request.form.get("source") or "").strip() or docparse.source_label(filename)
+
+    # 长文件按段落拆成多条，每条都不超过单条内容上限
+    parts = knowledge.split_for_documents(text)
+    doc_ids: list[str] = []
+    chunks = 0
+    action = "created"
+    indexed_at = ""
+    for index, part in enumerate(parts, start=1):
+        part_id = doc_id if len(parts) == 1 else f"{doc_id}_{index}"
+        part_title = title if len(parts) == 1 else f"{title}（{index}/{len(parts)}）"
+        item = knowledge.upsert_document(
+            collection=collection,
+            content=part,
+            title=part_title,
+            doc_id=part_id,
+            source=source,
+        )
+        doc_ids.append(item["doc_id"])
+        chunks += item["chunks"]
+        indexed_at = item["indexed_at"]
+        if item["action"] == "updated":
+            action = "updated"
+
+    return jsonify(
+        {
+            "doc_id": doc_ids[0],
+            "doc_ids": doc_ids,
+            "documents": len(doc_ids),
+            "collection": collection,
+            "title": title,
+            "chunks": chunks,
+            "action": action,
+            "indexed_at": indexed_at,
+            "filename": filename,
+            "chars": len(text),
+            "source": source,
+        }
+    )
 
 
 @bp.get("/documents/<doc_id>")
