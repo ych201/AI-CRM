@@ -1,4 +1,4 @@
-# SeaChat AI CRM（MVP）
+# SeaChat AI CRM
 
 按 `AI-CRM-SDD.md` v1.0 实现的 AI 职业咨询 CRM：手机号进入 → 意图分流（RAG / 联网 / SQL / 直答）→ 流式回答 → 画像沉淀 → 顾问后台跟进。
 
