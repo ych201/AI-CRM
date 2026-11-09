@@ -3,32 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}SeaChat · AI 顾问{% endblock %}</title>
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}SeaChat · 管理后台{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="admin-shell {% block body_class %}{% endblock %}">
   <header class="topbar">
-    <a class="brand" href="/">
+    <a class="brand" href="/admin/customers">
       <span class="brand-mark">SC</span>
-      <span class="brand-text">SeaChat<em>AI CRM</em></span>
+      <span class="brand-text">SeaChat<em>管理后台</em></span>
     </a>
     <nav class="nav">
-      <a href="/" class="{{ 'is-active' if active == 'chat' else '' }}">客户视图</a>
       <a href="/admin/customers" class="{{ 'is-active' if active == 'customers' else '' }}">客户</a>
       <a href="/admin/kb" class="{{ 'is-active' if active == 'kb' else '' }}">知识库</a>
     </nav>
-    {% if active in ('customers', 'kb') %}
-    <div class="key-box">
-      <label for="apiKey">API Key</label>
-      <input id="apiKey" type="password" placeholder="X-API-Key" autocomplete="off" spellcheck="false">
-      <span id="keyState" class="key-state"></span>
-    </div>
-    {% else %}
     <div class="topbar-right">
-      <span class="badge badge-soft">客户视图</span>
-      <span id="topbarPhone" class="topbar-phone"></span>
+      <a class="btn btn-ghost btn-sm" href="/" target="_blank" rel="noreferrer">用户端</a>
+      <span class="admin-user">{{ admin or '—' }}</span>
+      <form method="post" action="/admin/logout" class="logout-form">
+        <button class="btn btn-sm" type="submit">退出登录</button>
+      </form>
     </div>
-    {% endif %}
   </header>
 
   {% block content %}{% endblock %}

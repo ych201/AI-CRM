@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, request
@@ -96,6 +97,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         SECRET_KEY=cfg.secret_key,
         MAX_CONTENT_LENGTH=MAX_FILE_BYTES + 1024 * 1024,
         JSON_SORT_KEYS=False,
+        # 管理端登录会话
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=max(1, cfg.session_hours)),
     )
     app.json.ensure_ascii = False
     app.json.sort_keys = False

@@ -1,0 +1,33 @@
+{% extends "base_user.html" %}
+{% block title %}SeaChat · AI 职业顾问{% endblock %}
+{% block body_class %}page-home{% endblock %}
+
+{% block topbar_right %}
+<a class="btn btn-ghost btn-sm" href="/chat">已有记录？直接继续</a>
+{% endblock %}
+
+{% block content %}
+<main class="home-wrap">
+  <section class="home-card">
+    <span class="badge badge-soft">AI 职业咨询</span>
+    <h1>先聊聊你现在的情况</h1>
+    <p class="home-lead">
+      说说你现在做什么、想达成什么，我先帮你判断这条路适不适合。不用注册，
+      输入手机号就能找回之前的对话继续聊。
+    </p>
+
+    <a class="btn btn-primary home-cta" href="/chat">开始咨询</a>
+
+    <ul class="home-points">
+      <li><strong>点开就聊</strong><span>无需注册、无需密码，一步进入对话</span></li>
+      <li><strong>记录可续</strong><span>同一个手机号自动带回历史对话</span></li>
+      <li><strong>随时重来</strong><span>换个手机号就是一个新的开始</span></li>
+    </ul>
+  </section>
+
+  <footer class="home-foot">
+    <span class="muted">SeaChat AI CRM</span>
+    <a href="/admin/login">管理登录</a>
+  </footer>
+</main>
+{% endblock %}

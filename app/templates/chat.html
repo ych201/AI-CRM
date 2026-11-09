@@ -1,18 +1,23 @@
-{% extends "base.html" %}
-{% block title %}SeaChat · AI 顾问{% endblock %}
+{% extends "base_user.html" %}
+{% block title %}SeaChat · 在线咨询{% endblock %}
 {% block body_class %}page-chat{% endblock %}
 
+{% block topbar_right %}
+<span id="topbarPhone" class="topbar-phone"></span>
+<a class="btn btn-ghost btn-sm" id="backHome" href="/">返回首页</a>
+{% endblock %}
+
 {% block content %}
-<main id="loginView" class="login-wrap">
-  <section class="login-card">
-    <h1>开始咨询</h1>
-    <p class="muted">说说你现在做什么、想达成什么，我先帮你判断这条路适不适合。</p>
-    <form id="loginForm" autocomplete="off">
+<main id="entryView" class="entry-wrap">
+  <section class="entry-card">
+    <h1>输入手机号，继续你的咨询</h1>
+    <p class="muted">同一个手机号会自动带回历史对话；新号码直接开始。</p>
+    <form id="entryForm" autocomplete="off">
       <input id="phoneInput" name="phone" inputmode="numeric" maxlength="11" placeholder="请输入手机号" aria-label="手机号">
-      <button class="btn btn-primary" type="submit">进入</button>
+      <button class="btn btn-primary" type="submit">进入对话</button>
     </form>
-    <p class="form-error" id="loginError"></p>
-    <p class="hint">仅用于找回你的咨询记录</p>
+    <p class="form-error" id="entryError"></p>
+    <p class="hint">手机号仅用于找回你的咨询记录</p>
   </section>
 </main>
 

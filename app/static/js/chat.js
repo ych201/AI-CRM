@@ -31,17 +31,18 @@
     setTimeout(function () { el.remove(); }, 3200);
   }
 
-  function showLogin(message) {
-    $('loginError').textContent = message || '';
-    $('loginView').classList.remove('hidden');
+  function showEntry(message) {
+    $('entryError').textContent = message || '';
+    $('entryView').classList.remove('hidden');
     $('chatView').classList.add('hidden');
     $('panelToggle').classList.add('hidden');
+    $('topbarPhone').textContent = '';
     var input = $('phoneInput');
     if (input) input.focus();
   }
 
   function showChat() {
-    $('loginView').classList.add('hidden');
+    $('entryView').classList.add('hidden');
     $('chatView').classList.remove('hidden');
     $('panelToggle').classList.remove('hidden');
   }
@@ -222,6 +223,12 @@
   function renderHistory(messages) {
     var host = $('messages');
     host.innerHTML = '';
+    if (messages.length) {
+      var divider = document.createElement('div');
+      divider.className = 'history-divider';
+      divider.textContent = '以上为历史记录，可以接着聊';
+      host.appendChild(divider);
+    }
     messages.forEach(function (m) {
       var node = addMessage(m.role, m.content, {
         time: (m.created_at || '').slice(11, 16),
@@ -422,7 +429,7 @@
 
   /* ------------------------------------------------------------ 进入 */
   function enter(phone) {
-    $('loginError').textContent = '';
+    $('entryError').textContent = '';
     fetch('/api/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -440,7 +447,7 @@
       state.conversationId = data.conversation_id;
       localStorage.setItem('seachat_phone', phone);
       if (window.history && window.history.replaceState) {
-        window.history.replaceState({}, '', '/');
+        window.history.replaceState({}, '', '/chat');
       }
       $('messages').innerHTML = '';
       showChat();
@@ -449,7 +456,7 @@
       loadCard(true);
       $('input').focus();
     }).catch(function (err) {
-      showLogin((err && err.message) || '网络异常，请重试');
+      showEntry((err && err.message) || '网络异常，请重试');
     });
   }
 
@@ -461,11 +468,11 @@
   }
 
   function bind() {
-    $('loginForm').addEventListener('submit', function (e) {
+    $('entryForm').addEventListener('submit', function (e) {
       e.preventDefault();
       var phone = $('phoneInput').value.trim();
       if (!PHONE_RE.test(phone)) {
-        $('loginError').textContent = '请输入 11 位手机号';
+        $('entryError').textContent = '请输入 11 位手机号';
         return;
       }
       enter(phone);
@@ -502,7 +509,11 @@
 
     $('switchPhone').addEventListener('click', function () {
       localStorage.removeItem('seachat_phone');
-      window.location.href = '/';
+      state.phone = '';
+      state.conversationId = null;
+      $('messages').innerHTML = '';
+      $('phoneInput').value = '';
+      showEntry('');
     });
 
     $('panelToggle').addEventListener('click', function () {
@@ -528,9 +539,10 @@
     var params = new URLSearchParams(window.location.search);
     var phone = params.get('phone') || localStorage.getItem('seachat_phone');
     if (phone && PHONE_RE.test(phone)) {
+      $('phoneInput').value = phone;
       enter(phone);
     } else {
-      showLogin('');
+      showEntry('');
     }
   }
 

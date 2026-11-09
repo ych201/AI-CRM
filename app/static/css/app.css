@@ -82,16 +82,11 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; color: 
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .topbar-phone { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
-.key-box { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.key-box label { font-size: 12px; color: var(--muted); }
-.key-box input {
-  width: 180px; height: 32px; padding: 0 10px;
-  border: 1px solid var(--line); border-radius: var(--r-sm);
-  background: #fbfbfd; font-family: var(--mono); font-size: 12px;
+.admin-user {
+  font-size: 12px; color: var(--muted);
+  padding-left: 10px; border-left: 1px solid var(--line);
 }
-.key-box input:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
-.key-state { font-size: 11px; color: var(--ok); min-width: 34px; }
-.key-state.is-bad { color: var(--danger); }
+.logout-form { margin: 0; }
 
 /* ============================================================ generic */
 .btn {
@@ -161,8 +156,8 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; color: 
 .toast.is-ok { background: var(--ok); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* ============================================================ login */
-.login-wrap {
+/* ============================================================ 用户入口 / 管理登录 */
+.login-wrap, .entry-wrap {
   min-height: 100dvh;
   display: grid; place-items: center;
   padding: 80px 20px 40px;
@@ -170,7 +165,7 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; color: 
     radial-gradient(900px 420px at 50% -10%, #e8ebff 0%, rgba(247, 248, 250, 0) 60%),
     var(--bg);
 }
-.login-card {
+.login-card, .entry-card {
   width: 100%; max-width: 400px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -178,17 +173,71 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; color: 
   box-shadow: var(--shadow-md);
   padding: 32px 28px 26px;
 }
-.login-card h1 { margin-bottom: 6px; }
-.login-card .muted { font-size: 13px; margin-bottom: 20px; }
-.login-card form { display: flex; flex-direction: column; gap: 10px; }
-.login-card input {
+.login-card h1, .entry-card h1 { margin-bottom: 6px; }
+.login-card .muted, .entry-card .muted { font-size: 13px; margin-bottom: 20px; }
+.login-card form, .entry-card form { display: flex; flex-direction: column; gap: 10px; }
+.login-card input, .entry-card input {
   height: 42px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: var(--r-sm);
   font-family: var(--mono); font-size: 15px; letter-spacing: .06em;
 }
-.login-card input:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
-.login-card .btn { height: 42px; }
-.login-card .hint { margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center; }
+.login-card input:focus, .entry-card input:focus {
+  outline: 2px solid var(--brand-soft); border-color: var(--brand);
+}
+.login-card .btn, .entry-card .btn { height: 42px; }
+.login-card .hint, .entry-card .hint {
+  margin-top: 14px; font-size: 12px; color: var(--muted); text-align: center;
+}
+
+/* 管理登录 */
+.admin-login-card { max-width: 380px; }
+.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.admin-login-card .field > span { font-size: 12px; color: var(--muted); }
+.admin-login-card input.login-input { letter-spacing: normal; font-family: var(--font); font-size: 14px; }
+.admin-login-card .form-error { margin-top: 10px; }
+.admin-login-card .hint a { font-size: 12px; }
+
+/* ============================================================ 用户入口页 */
+.page-home { background: var(--bg); }
+.home-wrap {
+  min-height: 100dvh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 26px;
+  padding: 96px 20px 40px;
+  background:
+    radial-gradient(900px 460px at 50% -6%, #e8ebff 0%, rgba(247, 248, 250, 0) 62%),
+    var(--bg);
+}
+.home-card {
+  width: 100%; max-width: 560px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow-md);
+  padding: 36px 34px 30px;
+  text-align: left;
+}
+.home-card h1 { font-size: 26px; margin: 14px 0 10px; letter-spacing: -.02em; }
+.home-lead { color: var(--muted); font-size: 14px; line-height: 1.8; }
+.home-cta {
+  height: 48px; margin: 24px 0 22px;
+  width: 100%; font-size: 15px; font-weight: 500;
+  border-radius: 10px;
+}
+.home-points {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: 10px;
+  border-top: 1px dashed var(--line); padding-top: 18px;
+}
+.home-points li { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.home-points strong { flex: 0 0 68px; font-weight: 500; }
+.home-points span { color: var(--muted); }
+.home-foot {
+  display: flex; align-items: center; gap: 16px;
+  font-size: 12px;
+}
+.home-foot a { color: var(--muted); }
+.home-foot a:hover { color: var(--brand); }
 
 /* ============================================================ chat layout */
 .chat-view {
@@ -232,6 +281,12 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; color: 
   padding: 24px clamp(16px, 4vw, 48px);
   display: flex; flex-direction: column; gap: 14px;
   scroll-behavior: smooth;
+}
+.history-divider {
+  align-self: center;
+  font-size: 11px; color: var(--muted);
+  background: #f1f2f6; border-radius: 999px;
+  padding: 2px 12px;
 }
 .msg { display: flex; flex-direction: column; max-width: min(720px, 82%); }
 .msg-user { align-self: flex-end; align-items: flex-end; }
@@ -440,7 +495,7 @@ tbody tr.is-clickable:hover { background: #fafaff; }
 @media (max-width: 900px) {
   .topbar { gap: 12px; padding: 0 14px; }
   .brand-text em { display: none; }
-  .key-box input { width: 108px; }
+  .admin-user { display: none; }
   .admin-wrap { padding: 72px 14px 32px; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .toolbar .input { width: 100%; }

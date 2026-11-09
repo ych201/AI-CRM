@@ -3,7 +3,6 @@
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
-  var KEY_STORE = 'seachat_admin_key';
   var STAGE = { new: '新客', contacted: '已接触', qualified: '有明确意向', won: '已成交', lost: '已流失' };
   var LEVEL = { cold: '冷', warm: '中', hot: '高' };
   var ROUTE = {
@@ -14,10 +13,11 @@
     ['current_role', '身份'], ['years_exp', '经验'], ['goal', '目标'],
     ['budget', '预算'], ['time_window', '时间窗'], ['city', '城市'], ['concerns', '顾虑']
   ];
-  var reloadPage = function () {};
-
   /* ------------------------------------------------------------ 公共 */
-  function apiKey() { return localStorage.getItem(KEY_STORE) || ''; }
+  function goLogin() {
+    var next = window.location.pathname + window.location.search;
+    window.location.href = '/admin/login?next=' + encodeURIComponent(next);
+  }
 
   function toast(message, kind) {
     var host = $('toastHost');
@@ -32,7 +32,8 @@
   function readResponse(res) {
     return res.json().catch(function () { return {}; }).then(function (data) {
       if (res.status === 401) {
-        toast('API Key 无效，请在右上角填写', 'error');
+        toast('登录已失效，请重新登录', 'error');
+        goLogin();
         throw new Error('unauthorized');
       }
       if (!res.ok) {
@@ -48,16 +49,17 @@
     options = options || {};
     var headers = options.headers || {};
     headers['Content-Type'] = 'application/json';
-    if (apiKey()) headers['X-API-Key'] = apiKey();
-    var init = { method: options.method || 'GET', headers: headers };
+    var init = { method: options.method || 'GET', headers: headers, credentials: 'same-origin' };
     if (options.body) init.body = JSON.stringify(options.body);
     return fetch(path, init).then(readResponse);
   }
 
   function apiUpload(path, formData) {
-    var headers = {};
-    if (apiKey()) headers['X-API-Key'] = apiKey();
-    return fetch(path, { method: 'POST', headers: headers, body: formData }).then(readResponse);
+    return fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: formData
+    }).then(readResponse);
   }
 
   function text(tag, value, className) {
@@ -85,26 +87,6 @@
     el.style.fontWeight = '500';
     el.style.color = level === 'hot' ? '#b45309' : (level === 'warm' ? '#047857' : '#6b7280');
     return el;
-  }
-
-  function initKeyBox() {
-    var input = $('apiKey');
-    var marker = $('keyState');
-    if (!input || !marker) return;
-    input.value = apiKey();
-    function mark() {
-      marker.textContent = apiKey() ? '已保存' : '未设置';
-      marker.classList.toggle('is-bad', !apiKey());
-    }
-    mark();
-    input.addEventListener('change', function () {
-      localStorage.setItem(KEY_STORE, input.value.trim());
-      mark();
-      reloadPage();
-    });
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { input.blur(); }
-    });
   }
 
   /* ============================================================ 客户页 */
@@ -224,7 +206,7 @@
       $('dOpenChat').onclick = function (e) {
         e.preventDefault();
         api('/api/customers/' + c.id + '/contact').then(function (data) {
-          window.open('/?phone=' + encodeURIComponent(data.phone), '_blank');
+          window.open('/chat?phone=' + encodeURIComponent(data.phone), '_blank');
         }).catch(function () {});
       };
     }
@@ -328,7 +310,6 @@
       }
     });
 
-    reloadPage = function () { load(true); };
     load(true);
   }
 
@@ -686,13 +667,11 @@
       if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
     });
 
-    reloadPage = load;
     load();
   }
 
   /* ------------------------------------------------------------ 启动 */
   function init() {
-    initKeyBox();
     var page = document.querySelector('.admin-wrap');
     if (!page) return;
     if (page.dataset.page === 'customers') initCustomers();

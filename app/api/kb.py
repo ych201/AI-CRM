@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from app.api.auth import require_api_key
+from app.api.auth import require_admin
 from app.core import docparse, knowledge, ratelimit
 from app.core.errors import InvalidArgument, NotFound, RateLimited, Unprocessable
 from app.db import kb as kb_db
@@ -20,7 +20,7 @@ def _check_limit() -> None:
 
 
 @bp.get("/documents")
-@require_api_key
+@require_admin
 def list_documents():
     collection = (request.args.get("collection") or "").strip() or None
     if collection and collection not in kb_db.COLLECTIONS:
@@ -39,7 +39,7 @@ def list_documents():
 
 
 @bp.post("/documents")
-@require_api_key
+@require_admin
 def upsert_document():
     _check_limit()
     data = request.get_json(silent=True)
@@ -68,7 +68,7 @@ def upsert_document():
 
 
 @bp.post("/upload")
-@require_api_key
+@require_admin
 def upload_document():
     """上传 PDF / Word(.docx) / TXT / Markdown，解析为纯文本后直接切片入库。"""
     _check_limit()
@@ -133,7 +133,7 @@ def upload_document():
 
 
 @bp.get("/documents/<doc_id>")
-@require_api_key
+@require_admin
 def get_document(doc_id: str):
     """编辑弹窗取全文（列表接口不返回 content）。"""
     doc = kb_db.get(doc_id)
@@ -143,7 +143,7 @@ def get_document(doc_id: str):
 
 
 @bp.delete("/documents/<doc_id>")
-@require_api_key
+@require_admin
 def delete_document(doc_id: str):
     _check_limit()
     result = knowledge.delete_document(doc_id)
@@ -153,7 +153,7 @@ def delete_document(doc_id: str):
 
 
 @bp.post("/rebuild")
-@require_api_key
+@require_admin
 def rebuild():
     _check_limit()
     data = request.get_json(silent=True) or {}

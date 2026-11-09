@@ -2,6 +2,8 @@
 
 按 `AI-CRM-SDD.md` v1.0 实现的 AI 职业咨询 CRM：手机号进入 → 意图分流（RAG / 联网 / SQL / 直答）→ 流式回答 → 画像沉淀 → 顾问后台跟进。
 
+用户端与管理端是两个独立入口：用户端点开即聊（手机号找回历史），管理端需要管理员账号 + 密码登录。
+
 - 后端：Flask 3 + SQLite（WAL）+ Chroma 本地向量库
 - 模型：DeepSeek `deepseek-chat`（OpenAI 兼容）、百炼 `text-embedding-v4`、Tavily Search
 - 前端：原生 HTML + Jinja2 + 原生 JS（无构建链、无 CDN，可离线打开）
@@ -27,16 +29,19 @@ python scripts/seed_kb.py     # 可选：导入 7 条示例知识（13 个切片
 python run.py                 # http://127.0.0.1:5000
 ```
 
-三个页面：
+页面（用户端 / 管理端分离）：
 
-| 路由 | 说明 |
-|---|---|
-| `/` | 客户端聊天页 |
-| `/admin/customers` | 客户列表 + 详情抽屉（右上角填 `ADMIN_API_KEY`） |
-| `/admin/kb` | 知识库管理（新建 / 编辑 / 删除 / 上传 PDF·Word·TXT·Markdown / 重建索引） |
+| 路由 | 端 | 说明 |
+|---|---|---|
+| `/` | 用户端 | 入口页，点「开始咨询」进入对话 |
+| `/chat` | 用户端 | 聊天页，输入手机号自动带回历史记录继续聊 |
+| `/admin/login` | 管理端 | 管理员账号 + 密码登录 |
+| `/admin/customers` | 管理端 | 客户列表 + 详情抽屉（需登录） |
+| `/admin/kb` | 管理端 | 知识库管理（新建 / 编辑 / 删除 / 上传 PDF·Word·TXT·Markdown / 重建索引，需登录） |
 
 > 端口被占用时：设置环境变量 `PORT=5055` 再启动。
-> 管理端 API Key 默认 `change-me-please`，只存在浏览器 `localStorage`，请在上线前改 `.env`。
+> 管理端默认账号 `admin`、默认密码 `change-me-please`（见 `.env` 的 `ADMIN_USERNAME` / `ADMIN_PASSWORD`），上线前务必修改。
+> 登录状态保存在服务端 Session Cookie，默认 8 小时（`SESSION_HOURS`），点「退出登录」立即失效。
 
 ### 离线演示模式
 
@@ -65,12 +70,12 @@ AI-CRM-v2.0/
 │  ├─ __init__.py            # create_app、错误处理
 │  ├─ config.py              # .env 读取、结构化 JSON 日志
 │  ├─ api/
-│  │  ├─ auth.py             # X-API-Key 鉴权（hmac.compare_digest）
+│  │  ├─ auth.py             # 管理端登录（账号+密码 → Session）+ 接口鉴权
 │  │  ├─ chat.py             # /api/session、/api/chat(SSE)、/api/customer-card
 │  │  ├─ customers.py        # /api/customers*
 │  │  ├─ kb.py               # /api/kb/*
 │  │  ├─ health.py           # /api/health
-│  │  └─ pages.py            # 三个页面路由
+│  │  └─ pages.py            # 用户端 / 管理端页面路由
 │  ├─ core/
 │  │  ├─ pipeline.py         # 编排 + SSE 事件生成
 │  │  ├─ intent.py           # 意图识别 + 关键词降级
@@ -93,7 +98,7 @@ AI-CRM-v2.0/
 │  │  ├─ client.py           # DeepSeek 客户端 + 离线 Echo 客户端
 │  │  └─ embedding.py        # 百炼 embedding（批量 ≤10）+ 本地向量
 │  ├─ vector/store.py        # Chroma 客户端与 collection 管理
-│  ├─ templates/             # base / chat / admin_customers / admin_kb
+│  ├─ templates/             # base_user / base_admin / index / chat / admin_login / admin_*
 │  └─ static/                # css/app.css, js/chat.js, js/admin.js
 ├─ data/                     # 运行时生成：crm.db、chroma/
 ├─ scripts/
@@ -119,7 +124,9 @@ AI-CRM-v2.0/
 | `DASHSCOPE_API_KEY` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` / `EMBEDDING_BATCH` | 向量化（v4，1024 维，批量 ≤10） |
 | `TAVILY_API_KEY` | 联网搜索 |
 | `SQLITE_PATH` / `CHROMA_PATH` | 默认 `./data/crm.db`、`./data/chroma` |
-| `ADMIN_API_KEY` | 管理端 `X-API-Key` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 管理端登录账号 / 密码（默认 `admin` / `change-me-please`） |
+| `SESSION_HOURS` | 管理端登录有效期，默认 8 小时 |
+| `ADMIN_API_KEY` | 可选：脚本调用管理端接口用的 `X-API-Key`（页面不再使用） |
 | `RAG_TOP_K` / `RAG_SCORE_THRESHOLD` | 默认 4 / 0.35 |
 | `GREETING_USE_LLM` | 老客户问候语是否走一次短调用（5s 超时降级） |
 | `RATE_LIMIT_PHONE` / `RATE_LIMIT_GLOBAL` / `RATE_LIMIT_KB` | 10 / 60 / 20 次每 60s |
@@ -132,19 +139,22 @@ AI-CRM-v2.0/
 |---|---|---|---|
 | POST | `/api/session` | 无 | 手机号进入会话，返回客户、会话 ID、问候语 |
 | POST | `/api/chat` | 无 | 主对话接口，`text/event-stream` |
-| GET | `/api/customers` | Key | 客户列表（`q` / `stage` / `intent_level` / 分页）+ 统计 |
-| GET | `/api/customers/{id}` | Key | 客户详情 + 画像 + 会话 + 最近 50 条消息 |
-| PATCH | `/api/customers/{id}` | Key | 改阶段 / 意向 / 标签 / 备注 |
-| DELETE | `/api/customers/{id}` | Key | 删除客户（级联会话与消息，P1） |
-| GET | `/api/customers/{id}/contact` | Key | 「查看完整手机号」审计接口（P1，见 §6） |
-| GET | `/api/kb/documents` | Key | 知识条目列表（`collection` / `show_disabled`） |
-| GET | `/api/kb/documents/{doc_id}` | Key | 单条全文（编辑弹窗用，见 §6） |
-| POST | `/api/kb/documents` | Key | 新增或覆盖更新（对外开放，幂等） |
-| POST | `/api/kb/upload` | Key | 上传 PDF / Word(.docx) / TXT / Markdown，解析后切片入库（单文件 ≤ 10MB） |
-| DELETE | `/api/kb/documents/{doc_id}` | Key | 删除条目与全部向量 |
-| POST | `/api/kb/rebuild` | Key | 按 collection 重建索引（并发返回 409） |
+| GET | `/api/customers` | 登录 | 客户列表（`q` / `stage` / `intent_level` / 分页）+ 统计 |
+| GET | `/api/customers/{id}` | 登录 | 客户详情 + 画像 + 会话 + 最近 50 条消息 |
+| PATCH | `/api/customers/{id}` | 登录 | 改阶段 / 意向 / 标签 / 备注 |
+| DELETE | `/api/customers/{id}` | 登录 | 删除客户（级联会话与消息，P1） |
+| GET | `/api/customers/{id}/contact` | 登录 | 「查看完整手机号」审计接口（P1，见 §6） |
+| GET | `/api/kb/documents` | 登录 | 知识条目列表（`collection` / `show_disabled`） |
+| GET | `/api/kb/documents/{doc_id}` | 登录 | 单条全文（编辑弹窗用，见 §6） |
+| POST | `/api/kb/documents` | 登录 | 新增或覆盖更新（对外开放，幂等） |
+| POST | `/api/kb/upload` | 登录 | 上传 PDF / Word(.docx) / TXT / Markdown，解析后切片入库（单文件 ≤ 10MB） |
+| DELETE | `/api/kb/documents/{doc_id}` | 登录 | 删除条目与全部向量 |
+| POST | `/api/kb/rebuild` | 登录 | 按 collection 重建索引（并发返回 409） |
 | GET | `/api/health` | 无 | SQLite / Chroma / LLM / Embedding 探测 |
 | GET | `/api/customer-card` | 无 | 聊天页客户卡（`with_messages=1` 带最近 20 条，见 §6） |
+
+> 「登录」= 先在 `/admin/login` 用管理员账号密码登录，浏览器带 Session Cookie 访问；
+> 未登录时接口返回 401 `UNAUTHORIZED`，页面自动跳登录页。脚本/CI 也可继续用 `X-API-Key` 头调用。
 
 错误统一为：
 
@@ -205,15 +215,17 @@ event: error      {"code":"UPSTREAM_TIMEOUT","message":"模型响应超时","ret
 
 ## 6. 与 SDD 的差异 / 扩展（实现期补充）
 
-1. **`GET /api/customer-card`**（无 Key）：聊天页刷新客户卡与恢复历史用。手机号即身份，与 `/api/chat` 同级鉴权；不返回完整号码以外的敏感信息。
-2. **`GET /api/customers/{id}/contact`**（Key）：SDD 9.3 的 P1「查看完整」审计接口，供抽屉「打开对话」使用；列表与详情仍只返回脱敏号码。
-3. **`GET /api/kb/documents/{doc_id}`**（Key）：编辑弹窗取全文，列表接口不返回 `content`。
-4. **离线降级链路**：SDD 假设外部服务可用；本项目补充了无密钥可运行的 `EchoClient` 与本地向量，仅用于开发/演示/单测，不代表线上能力。
-5. **离线检索阈值**：本地哈希向量与真实 embedding 分布不同，离线模式改用相对阈值（top × 0.6，下限 0.05）；线上仍为 `0.35`。
-6. **生成阶段不再二次流式**：工具循环拿到最终文本后按 10 字切片下发，避免多一次生成（用户可见效果一致，首字更快）。
-7. **问候语**：模板优先，`GREETING_USE_LLM=true` 且已配置模型时，老客户额外走一次 5s 短调用（失败静默降级）。
-8. **静态 JS 用原生 `fetch` + `ReadableStream`** 解析 SSE（`EventSource` 不支持 POST body）。
-9. **依赖精简**：用官方 `openai` SDK 直连 DeepSeek / 百炼的 OpenAI 兼容端点，保留 `langchain-text-splitters` 做切片，未引入完整 LangChain 链路（SDD 4.4 的 LangChain 属于选型建议，接口契约与行为不变）。
+1. **管理端登录页（扩展）**：SDD 原本「不做登录页、只填 API Key」，现改为账号 + 密码 + 服务端 Session（`ADMIN_USERNAME` / `ADMIN_PASSWORD`，默认 8 小时有效），失败 10 次/5 分钟按来源 IP 限流；`X-API-Key` 仅保留给脚本调用。
+2. **用户端入口页（扩展）**：`/` 为入口页，`/chat` 为对话页；输入手机号即带回历史对话（同一手机号 24 小时内复用会话）。
+3. **`GET /api/customer-card`**（无鉴权）：聊天页刷新客户卡与恢复历史用。手机号即身份，与 `/api/chat` 同级鉴权；不返回完整号码以外的敏感信息。
+4. **`GET /api/customers/{id}/contact`**（登录）：SDD 9.3 的 P1「查看完整」审计接口，供抽屉「打开对话」使用；列表与详情仍只返回脱敏号码。
+5. **`GET /api/kb/documents/{doc_id}`**（登录）：编辑弹窗取全文，列表接口不返回 `content`。
+6. **离线降级链路**：SDD 假设外部服务可用；本项目补充了无密钥可运行的 `EchoClient` 与本地向量，仅用于开发/演示/单测，不代表线上能力。
+7. **离线检索阈值**：本地哈希向量与真实 embedding 分布不同，离线模式改用相对阈值（top × 0.6，下限 0.05）；线上仍为 `0.35`。
+8. **生成阶段不再二次流式**：工具循环拿到最终文本后按 10 字切片下发，避免多一次生成（用户可见效果一致，首字更快）。
+9. **问候语**：模板优先，`GREETING_USE_LLM=true` 且已配置模型时，老客户额外走一次 5s 短调用（失败静默降级）。
+10. **静态 JS 用原生 `fetch` + `ReadableStream`** 解析 SSE（`EventSource` 不支持 POST body）。
+11. **依赖精简**：用官方 `openai` SDK 直连 DeepSeek / 百炼的 OpenAI 兼容端点，保留 `langchain-text-splitters` 做切片，未引入完整 LangChain 链路（SDD 4.4 的 LangChain 属于选型建议，接口契约与行为不变）。
 
 ---
 
@@ -233,21 +245,25 @@ event: error      {"code":"UPSTREAM_TIMEOUT","message":"模型响应超时","ret
 - 「AI 产品经理课程多少钱」→ `intent_code=2`、`route=rag_course`、带引用
 - 「今天新增了几个客户」→ 触发 `query_crm_db` 工具事件
 - 画像「我现在做行政，想转 AI 产品，预算一万以内」→ `current_role` / `goal` / `budget` 写入，`intent_level=hot`，`stage=qualified`
-- 消息落库；管理端无 Key 返回 401
+- 消息落库；管理端未登录返回 401
 
 手工验收（`curl` 或页面）：
 
 ```bash
+# 用户端：入口页 / 对话页
+curl -s -o /dev/null -w '%{http_code}\n' localhost:5000/
 curl -N -X POST localhost:5000/api/chat -H 'Content-Type: application/json' \
   -d '{"phone":"13800138000","message":"课程多少钱"}'
 
+# 管理端：先登录拿 Cookie，再调接口
+curl -s -c cookie.txt -X POST localhost:5000/admin/login \
+  -d 'username=admin&password=change-me-please' -o /dev/null -w '%{http_code}\n'
+curl -s -b cookie.txt 'localhost:5000/api/customers?page=1'
+
+# 脚本/CI 仍可用 X-API-Key
 curl -s -X POST localhost:5000/api/kb/documents \
   -H 'Content-Type: application/json' -H 'X-API-Key: change-me-please' \
   -d '{"doc_id":"course_pricing","collection":"course","title":"价格表","content":"实战班 9800 元"}'
-
-curl -s -X POST localhost:5000/api/kb/upload \
-  -H 'X-API-Key: change-me-please' \
-  -F 'collection=course' -F 'file=@课程大纲.pdf'
 ```
 
 ---

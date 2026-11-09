@@ -7,7 +7,7 @@ from flask import Blueprint, jsonify, request
 
 from app.db import conversations as conv_db
 from app.db import customers as customers_db
-from app.api.auth import require_api_key
+from app.api.auth import require_admin
 from app.core.errors import InvalidArgument, NotFound, Unprocessable
 
 bp = Blueprint("customers_api", __name__, url_prefix="/api/customers")
@@ -28,7 +28,7 @@ def _int_arg(name: str, default: int, low: int, high: int) -> int:
 
 
 @bp.get("")
-@require_api_key
+@require_admin
 def list_customers():
     q = (request.args.get("q") or "").strip()
     stage = (request.args.get("stage") or "").strip() or None
@@ -48,7 +48,7 @@ def list_customers():
 
 
 @bp.get("/<int:customer_id>")
-@require_api_key
+@require_admin
 def get_customer(customer_id: int):
     customer = customers_db.get_by_id(customer_id)
     if not customer:
@@ -60,7 +60,7 @@ def get_customer(customer_id: int):
 
 
 @bp.get("/<int:customer_id>/contact")
-@require_api_key
+@require_admin
 def get_contact(customer_id: int):
     """「查看完整手机号」（审计用途，SDD 9.3 P1）：仅此接口返回明文，日志不落号码。"""
     customer = customers_db.get_by_id(customer_id, with_mask=False)
@@ -71,7 +71,7 @@ def get_contact(customer_id: int):
 
 
 @bp.patch("/<int:customer_id>")
-@require_api_key
+@require_admin
 def patch_customer(customer_id: int):
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -118,7 +118,7 @@ def patch_customer(customer_id: int):
 
 
 @bp.delete("/<int:customer_id>")
-@require_api_key
+@require_admin
 def delete_customer(customer_id: int):
     if not customers_db.get_by_id(customer_id):
         raise NotFound("客户不存在")

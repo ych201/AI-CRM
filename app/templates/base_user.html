@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SeaChat · AI 顾问{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="user-shell {% block body_class %}{% endblock %}">
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">SC</span>
+      <span class="brand-text">SeaChat<em>AI 顾问</em></span>
+    </a>
+    <div class="spacer"></div>
+    {% block topbar_right %}{% endblock %}
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

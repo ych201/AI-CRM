@@ -27,6 +27,18 @@ def hit(key: str, limit: int, window: int) -> tuple[bool, int]:
         return True, 0
 
 
+def peek(key: str, limit: int, window: int) -> tuple[bool, int]:
+    """只查询是否已达上限，不消耗配额（登录前预检查用）。"""
+    now = time.monotonic()
+    with _lock:
+        bucket = _buckets.setdefault(key, deque())
+        _prune(bucket, window, now)
+        if len(bucket) >= limit:
+            wait = max(1, int(window - (now - bucket[0])) + 1)
+            return False, wait
+        return True, 0
+
+
 def check_chat(phone: str) -> tuple[bool, int]:
     from app.config import get_config
 

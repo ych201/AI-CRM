@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>SeaChat · 管理登录</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="admin-shell page-admin-login">
+  <main class="login-wrap">
+    <section class="login-card admin-login-card">
+      <div class="login-brand">
+        <span class="brand-mark">SC</span>
+        <span class="brand-text">SeaChat<em>管理后台</em></span>
+      </div>
+      <h1>登录</h1>
+      <p class="muted">使用管理员账号和密码进入后台。</p>
+
+      <form method="post" action="/admin/login" autocomplete="off">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label class="field">
+          <span>账号</span>
+          <input class="login-input" name="username" value="{{ username }}" autocomplete="username"
+                 spellcheck="false" placeholder="管理员账号" required>
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input class="login-input" type="password" name="password" autocomplete="current-password"
+                 placeholder="登录密码" required>
+        </label>
+        <button class="btn btn-primary" type="submit">登录</button>
+      </form>
+
+      {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+      <p class="hint"><a href="/">返回用户端</a></p>
+    </section>
+  </main>
+</body>
+</html>

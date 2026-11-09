@@ -76,9 +76,12 @@ class Config:
         self.sqlite_path = _as_path(os.getenv("SQLITE_PATH", ""), "./data/crm.db")
         self.chroma_path = _as_path(os.getenv("CHROMA_PATH", ""), "./data/chroma")
 
-        # 安全
+        # 安全：管理端走「账号 + 密码 + Session」，API Key 仅保留给脚本调用
+        self.admin_username = os.getenv("ADMIN_USERNAME", "admin").strip()
+        self.admin_password = os.getenv("ADMIN_PASSWORD", "change-me-please").strip()
         self.admin_api_key = os.getenv("ADMIN_API_KEY", "change-me-please").strip()
         self.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me").strip()
+        self.session_hours = _as_int(os.getenv("SESSION_HOURS"), 8)
 
         # 运行
         self.flask_env = os.getenv("FLASK_ENV", "development").strip()
